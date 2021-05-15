@@ -214,6 +214,8 @@ fn receive(cli: &Cli) -> Result<()> {
 #[cfg(test)]
 mod tests {
 
+    fn is_copy<T: Copy>(_t: T) {}
+
     #[test]
     fn test1() {
         let mut buf = vec![0u8; 16];
@@ -222,6 +224,8 @@ mod tests {
             println!("{}", i);
             buf[i] = random_payload[i % 16] as u8;
         }
+        let length_buf = [0u8; 4];
+        is_copy(length_buf);
 
         // let s = "Hello world!";
         // let my_vec: Vec<char> = s.chars().collect();
