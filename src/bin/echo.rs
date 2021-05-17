@@ -65,7 +65,7 @@ fn main() -> Result<()> {
                             println!("peer close the {} connection.", count);
                             break;
                         }
-                        let _ = stream.write_all(&buf);
+                        let _ = stream.write_all(&buf[..read_count]);
                     }
                     Err(err) => {
                         println!("{:?}", err);
