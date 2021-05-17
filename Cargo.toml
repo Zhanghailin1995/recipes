@@ -10,6 +10,14 @@ edition = "2018"
 name = "recipes-ttcp"
 path = "src/bin/ttcp.rs"
 
+[[bin]]
+name = "recipes-echo"
+path = "src/bin/echo.rs"
+
+[[bin]]
+name = "recipes-echo-client"
+path = "src/bin/echo_client.rs"
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 clap = "2.33.3"

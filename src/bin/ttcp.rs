@@ -131,8 +131,8 @@ fn transmit(cli: &Cli) -> Result<()> {
     println!("connected");
     let now = Instant::now();
     // write session message
-    stream.write_all(&(cli.number as i32).to_ne_bytes()[..])?;
-    stream.write_all(&(cli.length as i32).to_ne_bytes()[..])?;
+    stream.write_all(&(cli.number as i32).to_ne_bytes())?;
+    stream.write_all(&(cli.length as i32).to_ne_bytes())?;
 
     // prepare payload length + data
     let mut buf = vec![0u8; cli.length];
@@ -146,13 +146,13 @@ fn transmit(cli: &Cli) -> Result<()> {
 
     for _ in 0..cli.number {
         // write length
-        stream.write_all(&(cli.length as i32).to_ne_bytes()[..])?;
+        stream.write_all(&(cli.length as i32).to_ne_bytes())?;
         // write payload
-        stream.write_all(&buf[..])?;
+        stream.write_all(&buf)?;
 
         // wait ack
         let mut ack = [0u8; 4];
-        stream.read_exact(&mut ack[..])?;
+        stream.read_exact(&mut ack)?;
         let ack = i32::from_ne_bytes(ack);
         assert!(ack == cli.length as i32);
     }
@@ -171,12 +171,12 @@ fn receive(cli: &Cli) -> Result<()> {
         .parse::<SocketAddr>()
         .expect(&format!("Unable to resolve {}", sock_addr));
     let listener = TcpListener::bind(sock_addr)?;
-
+    
     let (mut stream, _) = listener.accept()?;
 
     // recv session message
     let mut session_buf = [0u8; 8];
-    stream.read_exact(&mut session_buf[..])?;
+    stream.read_exact(&mut session_buf)?;
     let (number_buf, length_buf): ([u8; 4], [u8; 4]) = unsafe { transmute(session_buf) };
 
     let number = i32::from_ne_bytes(number_buf);
@@ -194,13 +194,13 @@ fn receive(cli: &Cli) -> Result<()> {
     let mut length_buf = [0u8; 4];
     let mut payload_buf = vec![0u8; length as usize];
     for _ in 0..number {
-        stream.read_exact(&mut length_buf[..])?;
+        stream.read_exact(&mut length_buf)?;
         let ack = i32::from_ne_bytes(length_buf);
 
         // read payload
-        stream.read_exact(&mut payload_buf[..])?;
+        stream.read_exact(&mut payload_buf)?;
         // send ack
-        stream.write_all(&ack.to_ne_bytes()[..])?;
+        stream.write_all(&ack.to_ne_bytes())?;
     }
 
     stream.flush()?;
@@ -227,6 +227,12 @@ mod tests {
         let length_buf = [0u8; 4];
         is_copy(length_buf);
 
+        let len = 1024;
+
+        let mut msg_bytes:Vec<u8> = Vec::with_capacity(len);
+        unsafe {
+            msg_bytes.set_len(len);
+        };
         // let s = "Hello world!";
         // let my_vec: Vec<char> = s.chars().collect();
         // println!("my_vec[0]: {}", my_vec[0]);
