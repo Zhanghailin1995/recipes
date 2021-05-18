@@ -29,7 +29,7 @@ fn parse_command_line() -> Cli {
                 .short("h")
                 .help("Specify the server hostname")
                 .takes_value(true)
-                .default_value("127.0.0.1"),
+                .default_value("0.0.0.0"),
         )
         .arg(
             Arg::with_name("client")
@@ -78,8 +78,9 @@ fn run_client(cli: &Cli) -> Result<()> {
     let local_addr = "0.0.0.0:0";
     let udp_socket = UdpSocket::bind(local_addr)?;
     let server_addr = format!("{}:{}", &cli.hostname, PORT);
+    println!("connecting to {}", &server_addr);
     udp_socket.connect(&server_addr)?;
-
+    println!("connected");
     let udp_socket = Arc::new(udp_socket);
 
     let socket1 = udp_socket.clone();
