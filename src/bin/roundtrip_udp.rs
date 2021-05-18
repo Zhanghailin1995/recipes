@@ -107,7 +107,9 @@ fn run_client(cli: &Cli) -> Result<()> {
 
     loop {
         let mut recv_buf = [0u8; MSG_SIZE];
+        // let bytes = Bytes::from(recv_buf.to_vec());
         let read_count = udp_socket.recv(&mut recv_buf)?;
+
         if read_count == MSG_SIZE {
             // let mut message = unsafe { transmute::<[u8; MSG_SIZE], Message>(recv_buf) };
             let (req_buf, res_buf): ([u8; MSG_SIZE / 2], [u8; MSG_SIZE / 2]) =
