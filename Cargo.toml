@@ -18,6 +18,10 @@ path = "src/bin/echo.rs"
 name = "recipes-echo-client"
 path = "src/bin/echo_client.rs"
 
+[[bin]]
+name = "recipes-rt-udp"
+path = "src/bin/roundtrip_udp.rs"
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 clap = "2.33.3"
