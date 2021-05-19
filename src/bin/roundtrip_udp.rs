@@ -89,9 +89,10 @@ fn run_client(cli: &Cli) -> Result<()> {
         loop {
             let message = Message { req: now(), res: 0 };
 
-            let msg_buf = unsafe { transmute::<&Message, &[u8; MSG_SIZE]>(&message) };
+            // let msg_buf =  { transmute::<&Message, &[u8; MSG_SIZE]>(&message) }; // update by cargo clippy
+            let msg_buf = unsafe { &*(&message as *const Message as *const [u8; MSG_SIZE]) };
             let write_count = socket1.send(msg_buf)?;
-            if write_count <= 0 {
+            if write_count == 0 {
                 println!("send message error");
                 break;
             } else if write_count != MSG_SIZE {
@@ -125,7 +126,7 @@ fn run_client(cli: &Cli) -> Result<()> {
                 now - req,
                 res - mine
             );
-        } else if read_count <= 0 {
+        } else if read_count == 0 {
             eprintln!("recv message");
         } else {
             println!(
@@ -151,7 +152,7 @@ fn run_server(cli: &Cli) -> Result<()> {
             let (_, right) = buf.split_at_mut(MSG_SIZE / 2);
             right.clone_from_slice(&now().to_ne_bytes());
             let write_count = udp_socket.send_to(&buf, peer_addr)?;
-            if write_count <= 0 {
+            if write_count == 0 {
                 println!("send message error");
                 break;
             } else if write_count != MSG_SIZE {
@@ -166,7 +167,7 @@ fn run_server(cli: &Cli) -> Result<()> {
             // let res = &now().to_ne_bytes() as *const u8;
             // let dst = &mut buf[MSG_SIZE / 2] as *mut u8;
             // unsafe { std::ptr::copy_nonoverlapping(res, dst, MSG_SIZE / 2) }
-        } else if read_count <= 0 {
+        } else if read_count == 0 {
             eprintln!("recv message");
         } else {
             println!(

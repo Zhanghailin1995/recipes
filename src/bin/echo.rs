@@ -50,7 +50,7 @@ fn main() -> Result<()> {
     loop {
         let (mut stream, _) = listener.accept()?;
         println!("accepted no.{} client", {
-            count = count + 1;
+            count += 1;
             count
         });
         // stream.set_nodelay(true)?;

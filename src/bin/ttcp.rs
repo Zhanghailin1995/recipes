@@ -100,7 +100,7 @@ fn parse_command_line() -> Cli {
     }
 
     Cli {
-        hostname: hostname,
+        hostname,
         port,
         transmit,
         receive,
@@ -124,9 +124,9 @@ fn transmit(cli: &Cli) -> Result<()> {
     let sock_addr = format!("{}:{}", cli.hostname.clone().unwrap(), cli.port);
     let sock_addr = sock_addr
         .parse::<SocketAddr>()
-        .expect(&format!("Unable to resolve {}", sock_addr));
+        .unwrap_or_else(|_| panic!("Unable to resolve {}", sock_addr));
     let mut stream =
-        TcpStream::connect(sock_addr).expect(&format!("Unable to connect {}", sock_addr));
+        TcpStream::connect(sock_addr).unwrap_or_else(|_| panic!("Unable to connect {}", sock_addr));
     stream.set_nodelay(true)?; // tcp nodelay
     println!("connected");
     let now = Instant::now();
@@ -141,7 +141,7 @@ fn transmit(cli: &Cli) -> Result<()> {
         buf[i] = random_payload[i % 16] as u8;
     }
 
-    let total_mb = 1.0 * (cli.length as f64) * (cli.number as f64) / (1024 as f64) / (1024 as f64);
+    let total_mb = 1.0 * (cli.length as f64) * (cli.number as f64) / (1024_f64) / (1024_f64);
     println!("{} MiB in total", total_mb);
 
     for _ in 0..cli.number {
@@ -169,7 +169,7 @@ fn receive(cli: &Cli) -> Result<()> {
     let sock_addr = format!("127.0.0.1:{}", cli.port);
     let sock_addr = sock_addr
         .parse::<SocketAddr>()
-        .expect(&format!("Unable to resolve {}", sock_addr));
+        .unwrap_or_else(|_| panic!("Unable to resolve {}", sock_addr));
     let listener = TcpListener::bind(sock_addr)?;
     
     let (mut stream, _) = listener.accept()?;
@@ -186,7 +186,7 @@ fn receive(cli: &Cli) -> Result<()> {
         "receive buffer length = {}\nreceive number of buffers = {}\n",
         number, length
     );
-    let total_mb = 1.0 * (number as f64) * (length as f64) / (1024 as f64) / (1024 as f64);
+    let total_mb = 1.0 * (number as f64) * (length as f64) / (1024_f64) / (1024_f64);
     println!("{} MiB in total", total_mb);
 
     let now = Instant::now();

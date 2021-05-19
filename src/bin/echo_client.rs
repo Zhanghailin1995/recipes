@@ -59,7 +59,7 @@ fn main() -> Result<()> {
     let sock_addr = format!("{}:{}", cli.hostname, cli.port);
     println!("connecting to {}", &sock_addr);
     let mut stream =
-        TcpStream::connect(&sock_addr).expect(&format!("Unable to connect {}", &sock_addr));
+        TcpStream::connect(&sock_addr).unwrap_or_else(|_| panic!("Unable to connect {}", &sock_addr));
     println!("connected, sending {} bytes", cli.length);
     // stream.set_nodelay(true)?; // tcp nodelay
 
