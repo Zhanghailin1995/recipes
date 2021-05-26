@@ -30,6 +30,10 @@ path = "src/bin/netcat.rs"
 name = "memcached-footprint"
 path = "src/bin/memcached_footprint.rs"
 
+[[bin]]
+name = "rs-procmon"
+path = "src/bin/procmon.rs"
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 clap = "2.33.3"
@@ -38,6 +42,7 @@ anyhow = "1.0"
 log = "0.4"
 env_logger = "0.8"
 lpfs = "0.2.0"
+actix-web = "3"
 
 [profile.release]
 # Unoptimized debug builds are too slow to profile
