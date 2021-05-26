@@ -89,10 +89,7 @@ impl Db {
 
         let bucket = mutex.lock().unwrap();
         let res = bucket.entries.get(item);
-        return match res {
-            Some(it) => Some(it.clone()),
-            None => None,
-        };
+        res.cloned()
     }
 
     #[allow(dead_code)]
@@ -208,4 +205,5 @@ fn process_info() {
     use lpfs::pid::stat_self;
     let stat = stat_self().unwrap();
     println!("vss:{}", stat.vsize());
+    println!("rss:{}", stat.rss());
 }
