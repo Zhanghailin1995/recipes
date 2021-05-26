@@ -197,6 +197,7 @@ fn main() -> anyhow::Result<()> {
     #[cfg(unix)]
     process_info();
     // println!("{:0>1$}", 5,4);
+    std::thread::sleep(std::time::Duration::from_secs(30));
     Ok(())
 }
 
