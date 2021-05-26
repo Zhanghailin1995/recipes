@@ -26,8 +26,20 @@ path = "src/bin/roundtrip_udp.rs"
 name = "recipes-netcat"
 path = "src/bin/netcat.rs"
 
+[[bin]]
+name = "rs-procmon"
+path = "src/bin/procmon.rs"
+
+[[bin]]
+name = "memcached-footprint"
+path = "src/bin/memcached_footprint.rs"
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 clap = "2.33.3"
 bytes = "1"
 anyhow = "1.0"
+actix-web = "3"
+log = "0.4"
+env_logger = "0.8"
+lpfs = "0.2.0"

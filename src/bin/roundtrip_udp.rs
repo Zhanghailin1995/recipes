@@ -108,15 +108,29 @@ fn run_client(cli: &Cli) -> Result<()> {
     });
 
     loop {
+        // tokio 的说法是如果你使用异步的话，最好使用 let mut recv_buf = vec![0;MSG_SIZE];
+        // 因为编译器会把一个async fn包装成一个future，如果使用数组，那么这个future会非常大
+        // A stack buffer is explicitly avoided. Recall from earlier, we noted that all task
+        // data that lives across calls to .await must be stored by the task. In this case, 
+        // buf is used across .await calls. All task data is stored in a single allocation. 
+        // You can think of it as an enum where each variant is the data that needs to be 
+        // stored for a specific call to .await.
+        // https://tokio.rs/tokio/tutorial/io
         let mut recv_buf = [0u8; MSG_SIZE];
+        // let mut recv_buf = vec![0;MSG_SIZE];
         // let bytes = Bytes::from(recv_buf.to_vec());
         let read_count = udp_socket.recv(&mut recv_buf)?;
 
         if read_count == MSG_SIZE {
+            // let bytes = Bytes::from(recv_buf);
             // let mut message = unsafe { transmute::<[u8; MSG_SIZE], Message>(recv_buf) };
+            // let req_buf = &recv_buf[..MSG_SIZE/2];
+            // let res_buf = &recv_buf[MSG_SIZE/2..];
             let (req_buf, res_buf): ([u8; MSG_SIZE / 2], [u8; MSG_SIZE / 2]) =
                 unsafe { transmute(recv_buf) };
             let now = now();
+            // let req = i64::from_ne_bytes(req_buf.try_into().unwrap());
+            // let res = i64::from_ne_bytes(res_buf.try_into().unwrap());
             let req = i64::from_ne_bytes(req_buf);
             let res = i64::from_ne_bytes(res_buf);
             let mine = (now + req) / 2;
