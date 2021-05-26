@@ -43,3 +43,8 @@ actix-web = "3"
 log = "0.4"
 env_logger = "0.8"
 lpfs = "0.2.0"
+
+[profile.release]
+# Unoptimized debug builds are too slow to profile
+# having debug info doesn't hurt perf for now
+debug = true
