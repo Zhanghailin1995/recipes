@@ -172,6 +172,7 @@ fn parse_command_line() -> Cli {
 fn main() -> anyhow::Result<()> {
     let cli = parse_command_line();
     println!("sizeof(Item) = {}", std::mem::size_of::<Item>());
+    println!("sizeof(HashSet<Arc<Item>>) = {}", std::mem::size_of::<HashSet<Arc<Item>>>());
     println!("pid = {}", std::process::id());
     println!("items = {}", cli.items);
     println!("key_len = {}", cli.key_len);
@@ -183,8 +184,14 @@ fn main() -> anyhow::Result<()> {
     let db = Db::new(1024);
 
     for i in 0..cli.items {
-        let k = format!("{:0>1$}", i, cli.key_len);
-        unsafe { std::ptr::copy_nonoverlapping(k.as_ptr(), key.as_mut_ptr(), cli.key_len) }
+        // let k = format!("{:0>1$}", i, cli.key_len);
+        unsafe { 
+            // 先拷贝0过去
+            let x = i.to_ne_bytes();
+            std::ptr::write_bytes(key.as_mut_ptr(), 0u8, cli.key_len - std::mem::size_of::<usize>());
+            let dst = &mut key[cli.key_len - std::mem::size_of::<usize>()] as *mut u8;
+            std::ptr::copy_nonoverlapping(x.as_ptr(), dst, std::mem::size_of::<usize>()) 
+        }
         // println!("{}", std::str::from_utf8(&key[0..cli.key_len])?);
         let val = vec![random_vals[i % 10]; cli.val_len];
         let item = Arc::new(Item::new(&key[..cli.val_len], 0, 0, 0, val));
@@ -197,7 +204,7 @@ fn main() -> anyhow::Result<()> {
     #[cfg(unix)]
     process_info();
     // println!("{:0>1$}", 5,4);
-    std::thread::sleep(std::time::Duration::from_secs(30));
+    // std::thread::sleep(std::time::Duration::from_secs(30));
     Ok(())
 }
 
