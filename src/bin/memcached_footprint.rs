@@ -205,6 +205,7 @@ fn main() -> anyhow::Result<()> {
 
 #[cfg(unix)]
 fn process_info() {
-    use lpfs::proc::*;
-    println!("{:?}", stat_self().unwrap());
+    use lpfs::pid::stat_self;
+    let stat = stat_self().unwrap();
+    println!("vss:{}", stat.vsize());
 }
