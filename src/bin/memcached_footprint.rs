@@ -172,7 +172,7 @@ fn parse_command_line() -> Cli {
 fn main() -> anyhow::Result<()> {
     let cli = parse_command_line();
     println!("sizeof(Item) = {}", std::mem::size_of::<Item>());
-    println!("sizeof(HashSet<Arc<Item>>) = {}", std::mem::size_of::<HashSet<Arc<Item>>>());
+    println!("sizeof(Arc<Item>) = {}", std::mem::size_of::<Arc<Item>>());
     println!("pid = {}", std::process::id());
     println!("items = {}", cli.items);
     println!("key_len = {}", cli.key_len);
