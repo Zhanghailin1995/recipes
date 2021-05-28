@@ -1,5 +1,6 @@
-use std::{collections::hash_map::DefaultHasher, time::Instant};
+use std::collections::hash_map::DefaultHasher;
 use std::sync::Mutex;
+use std::usize;
 use std::{
     collections::HashSet,
     hash::{Hash, Hasher},
@@ -7,6 +8,8 @@ use std::{
 };
 
 use clap::{App, Arg};
+use libc::sysconf;
+use libc::_SC_CLK_TCK;
 
 #[derive(Debug, Clone)]
 struct Item {
@@ -18,13 +21,13 @@ struct Item {
 }
 
 impl Item {
-    fn new(key: &[u8], flags: u32, rel_exptime: i32, cas: u64, value: Vec<u8>) -> Item {
+    fn new(key: &[u8], flags: u32, rel_exptime: i32, cas: u64, value: &[u8]) -> Item {
         // let mut data = key.as_bytes().to_vec();
         // data.append(&mut value.to_vec());
 
         let mut data = Vec::with_capacity(key.len() + value.len());
         data.extend_from_slice(key);
-        data.extend(value);
+        data.extend_from_slice(value);
         // let hash =
         Item {
             key_len: key.len(),
@@ -106,7 +109,7 @@ impl Db {
 
 impl PartialEq for Item {
     fn eq(&self, other: &Self) -> bool {
-        self.data[..self.key_len] == other.data[..other.key_len]
+        self.data[..self.key_len].eq(&other.data[..other.key_len])
     }
 }
 
@@ -177,29 +180,38 @@ fn main() -> anyhow::Result<()> {
     println!("items = {}", cli.items);
     println!("key_len = {}", cli.key_len);
     println!("val_len = {}", cli.val_len);
-    let now = Instant::now();
+    // let now = Instant::now();
     let mut key = [0u8; 256];
+    let mut val = [0u8; 512];
     let random_vals: [u8; 10] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
     let db = Db::new(1024);
 
     for i in 0..cli.items {
         // let k = format!("{:0>1$}", i, cli.key_len);
-        unsafe { 
+        unsafe {
             // 先拷贝0过去
             let x = i.to_ne_bytes();
-            std::ptr::write_bytes(key.as_mut_ptr(), 0u8, cli.key_len - std::mem::size_of::<usize>());
+            std::ptr::write_bytes(
+                key.as_mut_ptr(),
+                0u8,
+                cli.key_len - std::mem::size_of::<usize>(),
+            );
             let dst = &mut key[cli.key_len - std::mem::size_of::<usize>()] as *mut u8;
-            std::ptr::copy_nonoverlapping(x.as_ptr(), dst, std::mem::size_of::<usize>()) 
+            std::ptr::copy_nonoverlapping(x.as_ptr(), dst, std::mem::size_of::<usize>())
         }
         // println!("{}", std::str::from_utf8(&key[0..cli.key_len])?);
-        let val = vec![random_vals[i % 10]; cli.val_len];
-        let item = Arc::new(Item::new(&key[..cli.val_len], 0, 0, 0, val));
+        // let val = vec![random_vals[i % 10]; cli.val_len];
+        let v = random_vals[i % 10];
+        unsafe {
+            std::ptr::write_bytes(val.as_mut_ptr(), v, cli.val_len);
+        }
+        let item = Arc::new(Item::new(&key[..cli.key_len], 0, 0, 0, &val[..cli.val_len]));
         let exist = db.set(&item);
         assert!(!exist);
     }
-    let elapsed = now.elapsed().as_secs_f64();
-    println!("{} seconds", elapsed);
+    // let elapsed = now.elapsed().as_secs_f64();
+    // println!("{} seconds", elapsed);
 
     #[cfg(unix)]
     process_info();
@@ -212,6 +224,54 @@ fn main() -> anyhow::Result<()> {
 fn process_info() {
     use lpfs::pid::stat_self;
     let stat = stat_self().unwrap();
-    println!("vss:{}", stat.vsize());
-    println!("rss:{}", stat.rss());
+    println!("vss: {}", stat.vsize());
+    println!("rss: {}", stat.rss());
+    let ticks = ticks_per_second() as f64;
+    println!("opend files: {}, limit: {}", get_opend_files(), getrlimit());
+    println!("user time: {}", *stat.utime() as f64 / ticks);
+    println!("sys time: {}", *stat.stime() as f64 / ticks);
+}
+
+#[cfg(unix)]
+fn ticks_per_second() -> i64 {
+    match unsafe { sysconf(_SC_CLK_TCK) } {
+        -1 => 0,
+        x => x,
+    }
+}
+
+#[cfg(unix)]
+fn get_opend_files() -> usize {
+    let read_dir = std::fs::read_dir("/proc/self/fd");
+    match read_dir {
+        Ok(dir) => {
+            return dir.into_iter().count();
+        }
+        Err(e) => {
+            println!("get opend files error: {}", e);
+            return 0;
+        }
+    }
+}
+
+#[cfg(unix)]
+fn getrlimit() -> usize {
+    use rlimit::*;
+    let (soft, _hard) = getrlimit(Resource::NOFILE).unwrap();
+    soft.as_usize()
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::Item;
+
+
+    #[test]
+    fn test_item_eq() {
+        let key = [1u8, 2u8, 1u8, 2u8];
+        let item1 = Item::new(&key[..2], 0, 0, 0, &key[..]);
+        let item2 = Item::new(&key[2..], 0, 0, 0, &key[..]);
+
+        assert_eq!(item1, item2);
+    }
 }

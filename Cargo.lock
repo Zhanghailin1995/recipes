@@ -1249,8 +1249,10 @@ dependencies = [
  "bytes 1.0.1",
  "clap",
  "env_logger",
+ "libc",
  "log",
  "lpfs",
+ "rlimit",
  "tokio 1.6.0",
 ]
 
@@ -1288,6 +1290,15 @@ checksum = "52e44394d2086d010551b14b53b1f24e31647570cd1deb0379e2c21b329aba00"
 dependencies = [
  "hostname",
  "quick-error",
+]
+
+[[package]]
+name = "rlimit"
+version = "0.5.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "81a9ed03edbed449d6897c2092c71ab5f7b5fb80f6f0b1a3ed6d40a6f9fc0720"
+dependencies = [
+ "libc",
 ]
 
 [[package]]
