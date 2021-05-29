@@ -1,131 +1,11 @@
-use std::collections::hash_map::DefaultHasher;
-use std::sync::Mutex;
+use std::sync::Arc;
 use std::usize;
-use std::{
-    collections::HashSet,
-    hash::{Hash, Hasher},
-    sync::Arc,
-};
 
 use clap::{App, Arg};
 use libc::sysconf;
 use libc::_SC_CLK_TCK;
-
-#[derive(Debug, Clone)]
-struct Item {
-    key_len: usize,
-    flags: u32,
-    rel_exptime: i32,
-    cas: u64,
-    data: Box<[u8]>,
-}
-
-impl Item {
-    fn new(key: &[u8], flags: u32, rel_exptime: i32, cas: u64, value: &[u8]) -> Item {
-        // let mut data = key.as_bytes().to_vec();
-        // data.append(&mut value.to_vec());
-
-        let mut data = Vec::with_capacity(key.len() + value.len());
-        data.extend_from_slice(key);
-        data.extend_from_slice(value);
-        // let hash =
-        Item {
-            key_len: key.len(),
-            flags,
-            rel_exptime,
-            cas,
-            data: data.into_boxed_slice(),
-        }
-    }
-}
-
-// 感觉这个shared只需要使用全局static变量就可以了
-#[derive(Debug, Clone)]
-struct Db {
-    shared: Arc<Shared>,
-}
-#[derive(Debug)]
-struct Shared {
-    buckets: Vec<Mutex<Bucket>>,
-}
-#[derive(Debug, Clone)]
-struct Bucket {
-    /// Two `Arc`s are equal if their inner values are equal, even if they are
-    /// stored in different allocation.
-    entries: HashSet<Arc<Item>>,
-}
-
-impl Db {
-    fn new(bucket_size: usize) -> Db {
-        let mut buckets = Vec::with_capacity(bucket_size);
-        for _ in 0..bucket_size {
-            buckets.push(Mutex::new(Bucket {
-                entries: HashSet::<Arc<Item>>::new(),
-            }))
-        }
-        Db {
-            shared: Arc::new(Shared { buckets }),
-        }
-    }
-
-    fn set(&self, item: &Arc<Item>) -> bool {
-        // let mutex = self.shared.buckets
-        let hash = calculate_hash(item);
-        let idx = hash as usize % self.shared.buckets.len();
-        let mutex = self.shared.buckets.get(idx).unwrap();
-
-        let mut bucket = mutex.lock().unwrap();
-        let exist = bucket.entries.contains(item);
-        if exist {
-            bucket.entries.remove(item);
-        }
-        bucket.entries.insert(item.clone());
-
-        exist
-    }
-
-    #[allow(dead_code)]
-    fn get(&self, item: &Arc<Item>) -> Option<Arc<Item>> {
-        let hash = calculate_hash(item);
-        let idx = hash as usize % self.shared.buckets.len();
-        let mutex = self.shared.buckets.get(idx).unwrap();
-
-        let bucket = mutex.lock().unwrap();
-        let res = bucket.entries.get(item);
-        res.cloned()
-    }
-
-    #[allow(dead_code)]
-    fn delete(&self, item: &Arc<Item>) -> bool {
-        let hash = calculate_hash(item);
-        let idx = hash as usize % self.shared.buckets.len();
-        let mutex = self.shared.buckets.get(idx).unwrap();
-
-        let mut bucket = mutex.lock().unwrap();
-
-        bucket.entries.remove(item)
-    }
-}
-
-impl PartialEq for Item {
-    fn eq(&self, other: &Self) -> bool {
-        self.data[..self.key_len].eq(&other.data[..other.key_len])
-    }
-}
-
-impl Eq for Item {}
-
-impl Hash for Item {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.data[..self.key_len].hash(state);
-    }
-}
-
-fn calculate_hash<T: Hash>(t: &T) -> u64 {
-    let mut s = DefaultHasher::new();
-    t.hash(&mut s);
-    s.finish()
-}
+use recipes::memcached::db::Item;
+use recipes::MemcachedDb;
 
 struct Cli {
     items: usize,
@@ -185,7 +65,7 @@ fn main() -> anyhow::Result<()> {
     let mut val = [0u8; 512];
     let random_vals: [u8; 10] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
-    let db = Db::new(1024);
+    let db = MemcachedDb::new(1024);
 
     for i in 0..cli.items {
         // let k = format!("{:0>1$}", i, cli.key_len);
@@ -264,7 +144,6 @@ fn getrlimit() -> usize {
 #[cfg(test)]
 mod tests {
     use crate::Item;
-
 
     #[test]
     fn test_item_eq() {
