@@ -17,16 +17,17 @@ pub struct Item {
 }
 
 impl Item {
-    pub fn new(key: &[u8], flags: u32, rel_exptime: i32, cas: u64, value: &[u8]) -> Item {
+    pub fn new<K: AsRef<[u8]>,V:AsRef<[u8]>>(key: K, flags: u32, rel_exptime: i32, cas: u64, value: V) -> Item {
         // let mut data = key.as_bytes().to_vec();
         // data.append(&mut value.to_vec());
-
-        let mut data = Vec::with_capacity(key.len() + value.len());
-        data.extend_from_slice(key);
-        data.extend_from_slice(value);
+        let k = key.as_ref();
+        let v = value.as_ref();
+        let mut data = Vec::with_capacity(k.len() + v.len());
+        data.extend_from_slice(k);
+        data.extend_from_slice(v);
         // let hash =
         Item {
-            key_len: key.len(),
+            key_len: k.len(),
             flags,
             rel_exptime,
             cas,
