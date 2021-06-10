@@ -17,7 +17,13 @@ pub struct Item {
 }
 
 impl Item {
-    pub fn new<K: AsRef<[u8]>,V:AsRef<[u8]>>(key: K, flags: u32, rel_exptime: i32, cas: u64, value: V) -> Item {
+    pub fn new<K: AsRef<[u8]>, V: AsRef<[u8]>>(
+        key: K,
+        flags: u32,
+        rel_exptime: i32,
+        cas: u64,
+        value: V,
+    ) -> Item {
         // let mut data = key.as_bytes().to_vec();
         // data.append(&mut value.to_vec());
         let k = key.as_ref();

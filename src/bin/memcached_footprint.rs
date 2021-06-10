@@ -88,6 +88,8 @@ fn main() -> anyhow::Result<()> {
         }
         let item = Arc::new(Item::new(&key[..cli.key_len], 0, 0, 0, &val[..cli.val_len]));
         let exist = db.set(&item);
+        // item.key_len = 10;
+        // item.to_owned().key_len = 10; // compiler error
         assert!(!exist);
     }
     // let elapsed = now.elapsed().as_secs_f64();
