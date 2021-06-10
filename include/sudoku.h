@@ -2,4 +2,4 @@
 #include "rust/cxx.h"
 
 
-rust::String solve_sudoku(const char *puzzle, int length);
+rust::String inner_sudoku_resolve(const char *puzzle, int length);

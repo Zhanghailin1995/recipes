@@ -263,7 +263,7 @@ class SudokuSolver
     }
 };
 
-rust::String solve_sudoku(const char *puzzle, int length) {
+rust::String inner_sudoku_resolve(const char *puzzle, int length) {
     assert(length == kCells);
 
     std::string result = kNoSolution;

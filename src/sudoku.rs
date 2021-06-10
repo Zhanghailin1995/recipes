@@ -7,7 +7,7 @@ mod ffi {
     extern "C++" { 
         include!("recipes/include/sudoku.h");
 
-        unsafe fn solve_sudoku(puzzle: *const c_char, length: i32) -> String;
+        unsafe fn inner_sudoku_resolve(puzzle: *const c_char, length: i32) -> String;
     }
 }
 
@@ -18,7 +18,7 @@ pub fn sudoku_resolve(puzzle: &str) -> String {
         let c_str = CString::new(puzzle).unwrap();
         
         let puzzle = c_str.as_ptr() as *const c_char;
-        ffi::solve_sudoku(puzzle, length)
+        ffi::inner_sudoku_resolve(puzzle, length)
     }
 }
 
@@ -30,6 +30,12 @@ mod tests {
     fn test_sudoku_resolve() {
         let puzzle = "000000010400000000020000000000050407008000300001090000300400200050100000000806000";
         let result = sudoku_resolve(puzzle);
-        println!("{}", result);
+        // println!("{}", result);
+        assert_eq!("693784512487512936125963874932651487568247391741398625319475268856129743274836159", result);
+
+        let puzzle = "000000010400000000020000000000050407008000300001090000300400200050111000000806000";
+        let result = sudoku_resolve(puzzle);
+        // println!("{}", result);
+        assert_eq!("NoSolution", result);
     }
 }
