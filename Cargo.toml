@@ -36,7 +36,11 @@ path = "src/bin/procmon.rs"
 
 [[bin]]
 name = "sudoku-server"
-path = "src/bin/sudoku_server.rs"
+path = "src/bin/sudoku/sudoku_server.rs"
+
+[[bin]]
+name = "sudoku-server-basic"
+path = "src/bin/sudoku/sudoku_server_basic.rs"
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }

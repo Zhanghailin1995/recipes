@@ -10,8 +10,6 @@ use thiserror::Error;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::io::BufWriter;
-use tokio::io::ReadHalf;
-use tokio::io::WriteHalf;
 use tokio::runtime::Builder;
 use tokio::signal;
 use tokio::sync::mpsc;
@@ -22,7 +20,7 @@ use tokio::{
 };
 fn main() -> anyhow::Result<()> {
     let thread_rt = Builder::new_multi_thread()
-        .worker_threads(9)
+        .worker_threads(4)
         .thread_name("sudoku-server")
         .enable_io()
         .enable_time()
@@ -74,33 +72,16 @@ impl Listener {
         loop {
             let socket = self.accept().await?;
 
-            let (reader, writer) = tokio::io::split(socket);
-            let (tx, rx) = mpsc::channel(1024);
-            let mut reader_handler = ReaderHandler {
-                req_tx: tx,
-                reader: Reader::new(reader),
+            let mut handler = Handler {
+                connection: Connection::new(socket),
                 shutdown: Shutdown::new(self.notify_shutdown.subscribe()),
                 _shutdown_complete: self.shutdown_complete_tx.clone(),
             };
 
             // handler reader
             tokio::spawn(async move {
-                if let Err(err) = reader_handler.run().await {
+                if let Err(err) = handler.run().await {
                     error!("read error: {}", err);
-                }
-            });
-
-            let mut writer_handler = WriterHandler {
-                req_rx: rx,
-                writer: Writer::new(writer),
-                shutdown: Shutdown::new(self.notify_shutdown.subscribe()),
-                _shutdown_complete: self.shutdown_complete_tx.clone(),
-            };
-
-            // handler reader
-            tokio::spawn(async move {
-                if let Err(err) = writer_handler.run().await {
-                    error!("write error: {}", err);
                 }
             });
         }
@@ -114,8 +95,8 @@ impl Listener {
             // Perform the accept operation. If a socket is successfully
             // accepted, return it. Otherwise, save the error.
             match self.listener.accept().await {
-                Ok((socket, peer)) => {
-                    info!("peer: {} connected.", peer);
+                Ok((socket, _peer)) => {
+                    // info!("peer: {} connected.", peer);
                     return Ok(socket);
                 }
                 Err(err) => {
@@ -136,20 +117,18 @@ impl Listener {
 }
 
 #[derive(Debug)]
-struct Reader {
-    reader: ReadHalf<TcpStream>,
+struct Connection {
+    stream: BufWriter<TcpStream>,
     buffer: BytesMut,
 }
 
-// type Writer = Arc<Mutex<BufWriter<WriteHalf<TcpStream>>>>;
-
-impl Reader {
+impl Connection {
     /// Create a new `Connection`, backed by `socket`. Read and write buffers
     /// are initialized.
-    pub fn new(reader: ReadHalf<TcpStream>) -> Reader {
+    pub fn new(socket: TcpStream) -> Connection {
         // let (reader, writer) = tokio::io::split(socket);
-        Reader {
-            reader: reader,
+        Connection {
+            stream: BufWriter::new(socket),
             // writer: Arc::new(Mutex::new(BufWriter::new(writer))),
             // Default to a 4KB read buffer. For the use case of mini redis,
             // this is fine. However, real applications will want to tune this
@@ -172,7 +151,7 @@ impl Reader {
             //
             // On success, the number of bytes is returned. `0` indicates "end
             // of stream".
-            if 0 == self.reader.read_buf(&mut self.buffer).await? {
+            if 0 == self.stream.read_buf(&mut self.buffer).await? {
                 // The remote closed the connection. For this to be a clean
                 // shutdown, there should be no data in the read buffer. If
                 // there is, this means that the peer closed the socket while
@@ -184,6 +163,17 @@ impl Reader {
                 }
             }
         }
+    }
+
+    async fn send_result(&mut self, id: Option<&str>, ans: &str) -> anyhow::Result<()> {
+        if let Some(id) = id {
+            self.stream.write_all(id.as_bytes()).await?;
+            self.stream.write_u8(b':').await?;
+        }
+        self.stream.write_all(ans.as_bytes()).await?;
+        self.stream.write_all(b"\r\n").await?;
+        self.stream.flush().await?;
+        Ok(())
     }
     // frame id:puzzle\r\n or puzzle\r\n
     fn parse_frame(&mut self) -> anyhow::Result<Option<Frame>> {
@@ -217,30 +207,6 @@ impl Reader {
 }
 
 #[derive(Debug)]
-struct Writer {
-    writer: BufWriter<WriteHalf<TcpStream>>,
-}
-
-impl Writer {
-    fn new(writer: WriteHalf<TcpStream>) -> Self {
-        Self {
-            writer: BufWriter::with_capacity(4 * 1024, writer),
-        }
-    }
-
-    async fn send_result(&mut self, result: &Result) -> anyhow::Result<()> {
-        if let Some(ref id) = result.id {
-            self.writer.write_all(id.as_bytes()).await?;
-            self.writer.write_u8(b':').await?;
-        }
-        self.writer.write_all(result.ans.as_bytes()).await?;
-        self.writer.write_all(b"\r\n").await?;
-        self.writer.flush().await?;
-        Ok(())
-    }
-}
-
-#[derive(Debug)]
 struct Result {
     id: Option<String>,
     ans: String,
@@ -253,20 +219,19 @@ struct Frame {
 }
 
 #[derive(Debug)]
-struct ReaderHandler {
-    req_tx: mpsc::Sender<Frame>,
-    reader: Reader,
+struct Handler {
+    connection: Connection,
     shutdown: Shutdown,
     _shutdown_complete: mpsc::Sender<()>,
 }
 
-impl ReaderHandler {
+impl Handler {
     async fn run(&mut self) -> anyhow::Result<()> {
         // As long as the shutdown signal has not been received, try to read a
         // new request frame.
         while !self.shutdown.is_shutdown() {
             let maybe_frame = tokio::select! {
-                res = self.reader.read_frame() => res?,
+                res = self.connection.read_frame() => res?,
                 _ = self.shutdown.recv() => {
                     // If a shutdown signal is received, return from `run`.
                     // This will result in the task terminating.
@@ -277,46 +242,15 @@ impl ReaderHandler {
             // If `None` is returned from `read_frame()` then the peer closed
             // the socket. There is no further work to do and the task can be
             // terminated.
-            // and should shutdown writer
             let frame = match maybe_frame {
                 Some(frame) => frame,
                 None => return Ok(()),
             };
-
-            self.req_tx.send(frame).await?;
+            // get ans
+            let ans = sudoku_resolve(&frame.puzzle);
+            
+            self.connection.send_result(frame.id.as_deref(), &ans).await?;
         }
-        Ok(())
-    }
-}
-
-#[derive(Debug)]
-struct WriterHandler {
-    req_rx: mpsc::Receiver<Frame>,
-    writer: Writer,
-    shutdown: Shutdown,
-    _shutdown_complete: mpsc::Sender<()>,
-}
-
-impl WriterHandler {
-    async fn run(&mut self) -> anyhow::Result<()> {
-        while !self.shutdown.is_shutdown() {
-            let maybe_frame = tokio::select! {
-                res = self.req_rx.recv() => res,
-                _ = self.shutdown.recv() => {
-                    // If a shutdown signal is received, return from `run`.
-                    // This will result in the task terminating.
-                    return Ok(());
-                }
-            };
-            // if frame is none, the reader is close by peer
-            let frame = match maybe_frame {
-                Some(frame) => frame,
-                None => return Ok(()),
-            };
-            let res = sudoku_resolve(&frame);
-            self.writer.send_result(&res).await?;
-        }
-
         Ok(())
     }
 }
@@ -370,12 +304,7 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) -> anyhow::Result
     Ok(())
 }
 
-fn sudoku_resolve(req: &Frame) -> Result {
-    let ans = recipes::sudoku::sudoku_resolve(&req.puzzle);
-    info!("req: {}", req.puzzle);
-    // info!("ans: {}", ans);
-    Result {
-        id: req.id.clone(),
-        ans,
-    }
+#[inline]
+fn sudoku_resolve(req: &str) -> String {
+    recipes::sudoku::sudoku_resolve(&req)
 }
