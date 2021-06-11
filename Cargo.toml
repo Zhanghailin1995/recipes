@@ -34,6 +34,10 @@ path = "src/bin/memcached_footprint.rs"
 name = "rs-procmon"
 path = "src/bin/procmon.rs"
 
+[[bin]]
+name = "sudoku-server"
+path = "src/bin/sudoku_server.rs"
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "0.6", features = ["codec"] }
@@ -48,6 +52,7 @@ libc = "0.2"
 rlimit = "0.5.4"
 thiserror = "1"
 cxx = "1.0"
+subslice = "0.2.2"
 
 [build-dependencies]
 cxx-build = "1.0"
