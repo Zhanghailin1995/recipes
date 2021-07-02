@@ -31,16 +31,15 @@ name = "memcached-footprint"
 path = "src/bin/memcached_footprint.rs"
 
 [[bin]]
-name = "rs-procmon"
-path = "src/bin/procmon.rs"
-
-[[bin]]
 name = "sudoku-server"
 path = "src/bin/sudoku/sudoku_server.rs"
 
 [[bin]]
 name = "sudoku-server-basic"
 path = "src/bin/sudoku/sudoku_server_basic.rs"
+
+[features]
+default = []
 
 [dependencies]
 tokio = { version = "1", features = ["full"] }
@@ -51,7 +50,7 @@ anyhow = "1.0"
 log = "0.4"
 env_logger = "0.8"
 lpfs = "0.2.0"
-actix-web = "3"
+actix-web = { version = "3", optional = true }
 libc = "0.2"
 rlimit = "0.5.4"
 thiserror = "1"
@@ -61,7 +60,7 @@ lazy_static = "1.4.0"
 threadpool = "1.8.1"
 
 [target.'cfg(unix)'.dependencies]
-jemallocator = "0.3.2"
+jemallocator = { version = "0.3.2", optional = true }
 
 [build-dependencies]
 cxx-build = "1.0"
