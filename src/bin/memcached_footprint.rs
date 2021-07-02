@@ -2,7 +2,9 @@ use std::sync::Arc;
 use std::usize;
 
 use clap::{App, Arg};
+#[cfg(unix)]
 use libc::sysconf;
+#[cfg(unix)]
 use libc::_SC_CLK_TCK;
 use recipes::memcached::db::Item;
 use recipes::MemcachedDb;
