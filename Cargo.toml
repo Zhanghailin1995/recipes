@@ -57,10 +57,13 @@ rlimit = "0.5.4"
 thiserror = "1"
 cxx = "1.0"
 subslice = "0.2.2"
+lazy_static = "1.4.0"
+threadpool = "1.8.1"
+jemallocator = "0.3.2"
 
 [build-dependencies]
 cxx-build = "1.0"
-#[profile.release]
-# Unoptimized debug builds are too slow to profile
-# having debug info doesn't hurt perf for now
-#debug = true
+# [profile.release]
+#Unoptimized debug builds are too slow to profile
+#having debug info doesn't hurt perf for now
+# debug = true

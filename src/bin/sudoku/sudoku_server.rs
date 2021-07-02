@@ -1,17 +1,20 @@
 use std::future::Future;
+use std::sync::{Arc, Mutex};
 
 use bytes::Buf;
 use bytes::BytesMut;
-use log::error;
+use log::{error, warn};
 use log::info;
 use recipes::shutdown::Shutdown;
 use subslice::SubsliceExt;
 use thiserror::Error;
+use threadpool::ThreadPool;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::io::BufWriter;
 use tokio::io::ReadHalf;
 use tokio::io::WriteHalf;
+use tokio::net::TcpSocket;
 use tokio::runtime::Builder;
 use tokio::signal;
 use tokio::sync::mpsc;
@@ -20,27 +23,43 @@ use tokio::{
     net::{TcpListener, TcpStream},
     sync::broadcast,
 };
+
+// #[global_allocator]
+// static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
+
+
+
 fn main() -> anyhow::Result<()> {
+    env_logger::init();
+    info!("pid = {}", std::process::id());
     let thread_rt = Builder::new_multi_thread()
-        .worker_threads(9)
+        .worker_threads(1)
         .thread_name("sudoku-server")
         .enable_io()
         .enable_time()
         .build()?;
     thread_rt.block_on(async move {
-        env_logger::init();
         let port = 9981;
-        let listener = TcpListener::bind(&format!("0.0.0.0:{}", port)).await;
+        // let listener = TcpListener::bind(&format!("0.0.0.0:{}", port)).await;
+        let addr = (&format!("0.0.0.0:{}", port)).parse().unwrap();
+
+        let socket = TcpSocket::new_v4().unwrap();
+        match socket.bind(addr) {
+            Ok(_) => {},
+            Err(e) => {
+                error!("bind addr: {} error: {}", addr, e);
+                return;
+            },
+        };
+
+        let listener = socket.listen(10240);
         info!("sudoku server start listening: {}", port);
-        // if let Ok(listener) = listener {
-        //     let _ = run(listener, signal::ctrl_c()).await;
-        // }
         match listener {
             Ok(l) => {
                 let _ = run(l, signal::ctrl_c()).await;
             }
             Err(err) => {
-                error!("bind address[0.0.0.0:{}] error, cause: {}", port, err);
+                error!("listenning error, cause: {}", err);
             }
         }
     });
@@ -63,6 +82,8 @@ struct Listener {
 
     notify_shutdown: broadcast::Sender<()>,
 
+    pool: Arc<Mutex<ThreadPool>>,
+
     shutdown_complete_rx: mpsc::Receiver<()>,
     shutdown_complete_tx: mpsc::Sender<()>,
 }
@@ -75,10 +96,12 @@ impl Listener {
             let socket = self.accept().await?;
 
             let (reader, writer) = tokio::io::split(socket);
-            let (tx, rx) = mpsc::channel(1024);
+            let (tx, rx) = mpsc::channel(500000);
             let mut reader_handler = ReaderHandler {
-                req_tx: tx,
+                result_tx: tx,
                 reader: Reader::new(reader),
+                pool: self.pool.clone(),
+                throttling: false,
                 shutdown: Shutdown::new(self.notify_shutdown.subscribe()),
                 _shutdown_complete: self.shutdown_complete_tx.clone(),
             };
@@ -91,7 +114,7 @@ impl Listener {
             });
 
             let mut writer_handler = WriterHandler {
-                req_rx: rx,
+                result_rx: rx,
                 writer: Writer::new(writer),
                 shutdown: Shutdown::new(self.notify_shutdown.subscribe()),
                 _shutdown_complete: self.shutdown_complete_tx.clone(),
@@ -150,12 +173,11 @@ impl Reader {
         // let (reader, writer) = tokio::io::split(socket);
         Reader {
             reader: reader,
-            // writer: Arc::new(Mutex::new(BufWriter::new(writer))),
             // Default to a 4KB read buffer. For the use case of mini redis,
             // this is fine. However, real applications will want to tune this
             // value to their specific use case. There is a high likelihood that
             // a larger read buffer will work better.
-            buffer: BytesMut::with_capacity(4 * 1024),
+            buffer: BytesMut::with_capacity(512),
         }
     }
 
@@ -172,6 +194,9 @@ impl Reader {
             //
             // On success, the number of bytes is returned. `0` indicates "end
             // of stream".
+            // 这里的写法其实就是一个过载保护，如果buffer里面数据满了，是不会再读取数据的
+            // 可以使用 buffer.remaining 来判断，如果buffer小于多少了，就可以继续读取，而不是parse_frame
+            // 现在的写法就是buffer中数据不够一帧了才继续读取
             if 0 == self.reader.read_buf(&mut self.buffer).await? {
                 // The remote closed the connection. For this to be a clean
                 // shutdown, there should be no data in the read buffer. If
@@ -228,12 +253,12 @@ impl Writer {
         }
     }
 
-    async fn send_result(&mut self, result: &Result) -> anyhow::Result<()> {
-        if let Some(ref id) = result.id {
+    async fn send_result(&mut self, id: Option<&str>, ans: &str) -> anyhow::Result<()> {
+        if let Some(id) = id {
             self.writer.write_all(id.as_bytes()).await?;
             self.writer.write_u8(b':').await?;
         }
-        self.writer.write_all(result.ans.as_bytes()).await?;
+        self.writer.write_all(ans.as_bytes()).await?;
         self.writer.write_all(b"\r\n").await?;
         self.writer.flush().await?;
         Ok(())
@@ -254,9 +279,11 @@ struct Frame {
 
 #[derive(Debug)]
 struct ReaderHandler {
-    req_tx: mpsc::Sender<Frame>,
+    result_tx: mpsc::Sender<Result>,
     reader: Reader,
+    pool: Arc<Mutex<ThreadPool>>,
     shutdown: Shutdown,
+    throttling: bool,
     _shutdown_complete: mpsc::Sender<()>,
 }
 
@@ -282,8 +309,59 @@ impl ReaderHandler {
                 Some(frame) => frame,
                 None => return Ok(()),
             };
+            {
+                let _ = self.result_tx.reserve().await?;
+            }
+            
+            if self.throttling {
+                let queued_count = self.pool.lock().unwrap().queued_count();
+                if queued_count % 10000 == 0 {
+                    warn!("throttling, too many queued task:{}", queued_count);
+                }
+                if queued_count < 100 {
+                    warn!("throttling cancel, queued task:{}", queued_count);
+                    self.throttling = false;
+                }
+                self.result_tx.send(Result {
+                    id: frame.id,
+                    ans: "server too busy".to_string(),
+                }).await?;
+                
+                continue;
+            }
+            
+            // pool.queued_count()
+            // 过载保护，如果线程池堆积任务超过500000，停止进行计算
+            let queued_count = self.pool.lock().unwrap().queued_count();
+            if queued_count > 100000 {
+                self.throttling = true;
+                warn!("throttling, too many queued task:{}", queued_count);
+                self.result_tx.send(Result {
+                    id: frame.id,
+                    ans: "server too busy".to_string(),
+                }).await?;
+            } else {
+                let tx = self.result_tx.clone();
+                let pool = self.pool.lock().unwrap();
+                pool.execute(move || {
+                    let ans = sudoku_resolve(&frame.puzzle);
+                    let result = Result { id: frame.id, ans };
+                    // tx.reserve()
+                    if !tx.is_closed() {
+                        let send_res = tx.blocking_send(result);
+                        match send_res {
+                            Ok(_) => {}
+                            Err(e) => {
+                                error!("send error {}", e);
+                            }
+                        }
+                    }
+                });
+            }
 
-            self.req_tx.send(frame).await?;
+            
+
+            // self.req_tx.send(frame).await?;
         }
         Ok(())
     }
@@ -291,7 +369,7 @@ impl ReaderHandler {
 
 #[derive(Debug)]
 struct WriterHandler {
-    req_rx: mpsc::Receiver<Frame>,
+    result_rx: mpsc::Receiver<Result>,
     writer: Writer,
     shutdown: Shutdown,
     _shutdown_complete: mpsc::Sender<()>,
@@ -300,8 +378,8 @@ struct WriterHandler {
 impl WriterHandler {
     async fn run(&mut self) -> anyhow::Result<()> {
         while !self.shutdown.is_shutdown() {
-            let maybe_frame = tokio::select! {
-                res = self.req_rx.recv() => res,
+            let res = tokio::select! {
+                res = self.result_rx.recv() => res,
                 _ = self.shutdown.recv() => {
                     // If a shutdown signal is received, return from `run`.
                     // This will result in the task terminating.
@@ -309,12 +387,12 @@ impl WriterHandler {
                 }
             };
             // if frame is none, the reader is close by peer
-            let frame = match maybe_frame {
-                Some(frame) => frame,
+            let res = match res {
+                Some(s) => s,
                 None => return Ok(()),
             };
-            let res = sudoku_resolve(&frame);
-            self.writer.send_result(&res).await?;
+            // 应该有个反馈
+            self.writer.send_result(res.id.as_deref(), &res.ans).await?;
         }
 
         Ok(())
@@ -324,10 +402,17 @@ impl WriterHandler {
 pub async fn run(listener: TcpListener, shutdown: impl Future) -> anyhow::Result<()> {
     let (notify_shutdown, _) = broadcast::channel(1);
     let (shutdown_complete_tx, shutdown_complete_rx) = mpsc::channel(1);
-
+    let pool = Arc::new(Mutex::new(
+        threadpool::Builder::new()
+            .num_threads(4)
+            .thread_name("sudoku_compute".into())
+            // .thread_stack_size(8_000_000)
+            .build(),
+    ));
     let mut server = Listener {
         listener,
         notify_shutdown,
+        pool,
         shutdown_complete_tx,
         shutdown_complete_rx,
     };
@@ -370,12 +455,8 @@ pub async fn run(listener: TcpListener, shutdown: impl Future) -> anyhow::Result
     Ok(())
 }
 
-fn sudoku_resolve(req: &Frame) -> Result {
-    let ans = recipes::sudoku::sudoku_resolve(&req.puzzle);
-    // info!("req: {}", req.puzzle);
-    // info!("ans: {}", ans);
-    Result {
-        id: req.id.clone(),
-        ans,
-    }
+#[inline]
+fn sudoku_resolve(req: &str) -> String {
+    recipes::sudoku::sudoku_resolve(&req)
 }
+

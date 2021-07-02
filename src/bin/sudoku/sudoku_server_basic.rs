@@ -248,7 +248,14 @@ impl Handler {
             };
             // get ans
             let ans = sudoku_resolve(&frame.puzzle);
+            // let id = frame.puzzle.clone();
+            // let id = frame.id.clone();
+            // let ans = task::spawn_blocking(move || {
+            //     sudoku_resolve(&frame.puzzle)
+            // }).await?;
             
+            
+            // self.connection.send_result(id.as_deref(), &ans).await?;
             self.connection.send_result(frame.id.as_deref(), &ans).await?;
         }
         Ok(())
