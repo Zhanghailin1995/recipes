@@ -59,6 +59,8 @@ cxx = "1.0"
 subslice = "0.2.2"
 lazy_static = "1.4.0"
 threadpool = "1.8.1"
+
+[target.'cfg(unix)'.dependencies]
 jemallocator = "0.3.2"
 
 [build-dependencies]
