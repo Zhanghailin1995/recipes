@@ -252,7 +252,7 @@ struct Writer {
 impl Writer {
     fn new(writer: WriteHalf<TcpStream>) -> Self {
         Self {
-            writer: BufWriter::with_capacity(4 * 1024, writer),
+            writer: BufWriter::with_capacity(256, writer),
         }
     }
 

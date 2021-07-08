@@ -38,6 +38,10 @@ path = "src/bin/sudoku/sudoku_server.rs"
 name = "sudoku-server-basic"
 path = "src/bin/sudoku/sudoku_server_basic.rs"
 
+[[bin]]
+name = "tcp-relay"
+path = "src/bin/tcp_relay.rs"
+
 [features]
 default = []
 
