@@ -128,25 +128,27 @@ async fn proxy(client: &str, server: &str) -> io::Result<()> {
     loop {
         let (client, _) = listener.accept().await?;
         let server = connect(server).await?;
+        // 这里做重连的方案感觉是不合适的，relay服务器应该透传服务的的行为，如果服务端重启的话，就应该关闭双向的连接
+        // 重连的功能应该是终端来做，而不应该由中继服务器去做
+        let (read_from_client, write_to_client) = client.into_split();
+        let (read_from_server, write_to_server) = server.into_split();
 
-        let (eread, ewrite) = client.into_split();
-        let (oread, owrite) = server.into_split();
+        let mut tunnel1 = Tunnel::new(read_from_client, write_to_server);
+        let mut tunnel2 = Tunnel::new(read_from_server, write_to_client);
 
-        let mut tunnel1 = Tunnel::new(eread, owrite);
-        let mut tunnel2 = Tunnel::new(oread, ewrite);
-
-        let e2o = tokio::spawn(async move { tunnel1.copy().await });
-        let o2e = tokio::spawn(async move { tunnel2.copy().await });
+        let c2s = tokio::spawn(async move { tunnel1.copy().await });
+        let s2c = tokio::spawn(async move { tunnel2.copy().await });
 
         // let e2o = tokio::spawn(async move { io::copy(&mut eread, &mut owrite).await });
         // let o2e = tokio::spawn(async move { io::copy(&mut oread, &mut ewrite).await });
 
         // let e2o = io::copy(&mut eread, &mut owrite);
         // let o2e = io::copy(&mut oread, &mut ewrite);
+        
 
         tokio::select! {
-            _ = e2o => println!("c2s done"),
-            _ = o2e => println!("s2c done"),
+            _ = c2s => println!("c2s done"),
+            _ = s2c => println!("s2c done"),
 
         }
     }
