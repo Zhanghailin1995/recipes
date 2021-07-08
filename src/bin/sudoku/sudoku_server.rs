@@ -190,6 +190,8 @@ impl Reader {
                 return Ok(Some(frame));
             }
 
+            // tokio::task::yield_now();
+
             // There is not enough buffered data to read a frame. Attempt to
             // read more data from the socket.
             //
