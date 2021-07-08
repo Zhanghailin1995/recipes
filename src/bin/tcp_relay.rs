@@ -1,9 +1,13 @@
+use std::time::Duration;
+
 use clap::{App, Arg};
 use tokio::io::{self, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::time::{self, timeout};
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
+    println!("pid = {}", std::process::id());
     let matches = App::new("proxy")
         .version("0.1")
         .author("Zeke M. <zekemedley@gmail.com>")
@@ -56,13 +60,17 @@ impl CopyBuf {
 }
 
 #[derive(Debug)]
-struct Tunnel<R: AsyncRead, W: AsyncWrite> {
+struct Tunnel<R: AsyncRead + Unpin, W: AsyncWrite + Unpin> {
     reader: R,
     writer: W,
     buf: CopyBuf,
 }
 
-impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Tunnel<R, W> {
+impl<R, W> Tunnel<R, W>
+where
+    R: AsyncRead + Unpin,
+    W: AsyncWrite + Unpin,
+{
     fn new(reader: R, writer: W) -> Self {
         Self {
             reader,
@@ -105,7 +113,7 @@ impl<'a, R: AsyncRead + Unpin, W: AsyncWrite + Unpin> Tunnel<R, W> {
             // If we've written all the data and we've seen EOF, flush out the
             // data and finish the transfer.
             if self.buf.pos == self.buf.cap {
-                println!("{} bytes data copied.", self.buf.amt);
+                // println!("{} bytes data copied.", self.buf.amt);
                 if self.buf.read_done {
                     self.writer.flush().await?;
                     return Ok(());
@@ -119,7 +127,7 @@ async fn proxy(client: &str, server: &str) -> io::Result<()> {
     let listener = TcpListener::bind(client).await?;
     loop {
         let (client, _) = listener.accept().await?;
-        let server = TcpStream::connect(server).await?;
+        let server = connect(server).await?;
 
         let (eread, ewrite) = client.into_split();
         let (oread, owrite) = server.into_split();
@@ -141,5 +149,32 @@ async fn proxy(client: &str, server: &str) -> io::Result<()> {
             _ = o2e => println!("s2c done"),
 
         }
+    }
+}
+
+
+async fn connect(server: &str) -> io::Result<TcpStream> {
+    let mut backoff = 1;
+    // let mut duration = Duration::from_secs(1);
+    loop {
+        let duration = Duration::from_secs(3);
+        match timeout(duration, TcpStream::connect(server)).await? {
+            Ok(stream) => {
+                stream.set_nodelay(true)?;
+                return Ok(stream);
+            },
+            Err(e) => {
+                println!("cannot connect to {}, error: {:?}", server, e);
+                if backoff > 1024 {
+                    return Err(e);
+                }
+            },
+           
+        }
+        // Pause execution until the back off period elapses.
+        time::sleep(Duration::from_secs(backoff)).await;
+
+        // Double the back off
+        backoff *= 2;
     }
 }
