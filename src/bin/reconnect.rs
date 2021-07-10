@@ -39,13 +39,9 @@ fn get_standard_reconnect_strategy() -> DurationIterator {
         Duration::from_secs(40),
         Duration::from_secs(50),
         Duration::from_secs(60),
-        Duration::from_secs(60 * 2),
-        Duration::from_secs(60 * 5),
-        Duration::from_secs(60 * 10),
-        Duration::from_secs(60 * 20),
     ];
 
-    let repeat = std::iter::repeat(Duration::from_secs(60 * 30));
+    let repeat = std::iter::repeat(Duration::from_secs(60));
 
     let forever_iterator = initial_attempts.into_iter().chain(repeat);
 
