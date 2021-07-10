@@ -42,6 +42,18 @@ path = "src/bin/sudoku/sudoku_server_basic.rs"
 name = "tcp-relay"
 path = "src/bin/tcp_relay.rs"
 
+[[bin]]
+name = "multiplexer"
+path = "src/bin/multiplexer.rs"
+
+[[bin]]
+name = "tiny-http=server"
+path = "src/bin/tiny_http_server.rs"
+
+[[bin]]
+name = "reconnect"
+path = "src/bin/reconnect.rs"
+
 [features]
 default = []
 
@@ -62,6 +74,7 @@ cxx = "1.0"
 subslice = "0.2.2"
 lazy_static = "1.4.0"
 threadpool = "1.8.1"
+stubborn-io = "0.3.1"
 
 [target.'cfg(unix)'.dependencies]
 jemallocator = { version = "0.3.2", optional = true }

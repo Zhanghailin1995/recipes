@@ -1347,6 +1347,7 @@ dependencies = [
  "log",
  "lpfs",
  "rlimit",
+ "stubborn-io",
  "subslice",
  "thiserror",
  "threadpool",
@@ -1598,6 +1599,16 @@ name = "strsim"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ea5119cdb4c55b55d432abb513a0429384878c15dde60cc77b1c99de1a95a6a"
+
+[[package]]
+name = "stubborn-io"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dac97f21a9b0cedb0948f2a92ba70ff2be8e56efa08eddd6890d28d40bc4470a"
+dependencies = [
+ "log",
+ "tokio 1.6.0",
+]
 
 [[package]]
 name = "subslice"
